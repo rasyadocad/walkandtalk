@@ -1,0 +1,10 @@
+@font-face {
+    font-family: 'Siemens Sans';
+    src: url('https://design.mindsphere.io/fonts/SiemensSans-Regular.woff2') format('woff2'),
+         url('https://design.mindsphere.io/fonts/SiemensSans-Regular.woff') format('woff');
+    font-weight: normal;
+    font-style: normal;
+}
+body, html {
+    font-family: 'Siemens Sans', Arial, Helvetica, sans-serif;
+}
