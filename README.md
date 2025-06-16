@@ -24,7 +24,7 @@ Sistem pelaporan masalah safety dan 5S untuk lingkungan produksi Siemens.
 
 1. Clone repository
 ```bash
-git clone https://github.com/your-repo/walkandtalk.git
+git clone https://github.com/rasyadocad/walkandtalk.git
 ```
 
 2. Install dependencies
