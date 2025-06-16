@@ -48,9 +48,3 @@ php artisan migrate --seed
 ```bash
 php artisan serve
 ```
-
-## Dokumentasi
-
-- [API Documentation](docs/API.md)
-- [Database Schema](docs/DATABASE.md)
-- [Deployment Guide](docs/DEPLOYMENT.md)
