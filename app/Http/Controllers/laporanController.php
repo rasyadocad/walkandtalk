@@ -138,7 +138,7 @@ class laporanController extends Controller
         }
 
         // Hapus file foto lama yang tidak ada di `existing_photos`
-        $oldPhotos = json_decode($laporan->Foto, true) ?: [];
+        $oldPhotos = $laporan->Foto ?: []; // Model sudah cast ke array
         $photosToDelete = array_diff($oldPhotos, $existingPhotos);
         foreach ($photosToDelete as $photo) {
             if (file_exists(public_path('images/' . $photo))) {
@@ -148,7 +148,7 @@ class laporanController extends Controller
 
         // Perbarui data di database
         $laporan->update([
-            'Foto' => json_encode($allPhotos),
+            'Foto' => $allPhotos, // Langsung gunakan array, model akan handle encoding
             'departemen_supervisor_id' => $request->departemen_supervisor_id,
             'kategori_masalah' => $request->kategori_masalah,
             'deskripsi_masalah' => $request->deskripsi_masalah,
@@ -322,22 +322,20 @@ class laporanController extends Controller
         return DataTables::of($query)
             ->addIndexColumn()
             ->addColumn('foto', function ($row) {
-                $fotos = $row->Foto; // Ini sudah menjadi array karena $casts di Model
-                if (is_array($fotos) && !empty($fotos)) {
-                    $firstFotoUrl = url('images/' . $fotos[0]);
-                    // Siapkan semua URL foto untuk modal carousel
-                    $allPhotosUrls = array_map(fn($foto) => url('images/' . $foto), $fotos);
-                    $allPhotosJson = htmlspecialchars(json_encode($allPhotosUrls), ENT_QUOTES, 'UTF-8');
+                $photos = $row->Foto; // Ini sudah array karena casting di model
+                if (!empty($photos) && is_array($photos)) {
+                    $firstPhotoUrl = asset('images/' . $photos[0]);
+                    $photoUrls = array_map(function($photo) {
+                        return asset('images/' . $photo);
+                    }, $photos);
+                    $photosJson = htmlspecialchars(json_encode($photoUrls), ENT_QUOTES, 'UTF-8');
 
-                    return '<img src="' . $firstFotoUrl . '" alt="Foto Masalah" class="img-thumbnail" style="width: 100px; height: 100px; object-fit: cover; cursor:pointer;" data-bs-toggle="modal" data-bs-target="#modalFotoFull" data-photos=\'' . $allPhotosJson . '\'>';
+                    return '<img src="' . $firstPhotoUrl . '" alt="Foto Laporan" class="img-thumbnail" style="width: 100px; height: 100px; object-fit: cover; cursor:pointer;" data-bs-toggle="modal" data-bs-target="#modalFotoFull" data-photos=\'' . $photosJson . '\'>';
                 }
-                return '<img src="' . url('images/nophoto.jpg') . '" alt="Foto tidak tersedia" class="img-thumbnail" style="width: 100px; height: 100px; object-fit: cover;">';
+                return '<img src="' . asset('images/nophoto.jpg') . '" alt="Foto tidak tersedia" class="img-thumbnail" style="width: 100px; height: 100px; object-fit: cover;">';
             })
             ->addColumn('departemen', function ($row) {
-                if ($row->departemenSupervisor) {
-                    return $row->departemenSupervisor->departemen . '<br><small class="text-muted">' . $row->departemenSupervisor->supervisor . '</small>';
-                }
-                return '-';
+                return $row->departemenSupervisor->departemen ?? '-';
             })
             ->editColumn('Tanggal', function ($row) {
                 return $row->created_at ? $row->created_at->format('Y-m-d H:i:s') : '';
@@ -371,38 +369,43 @@ class laporanController extends Controller
         return DataTables::of($query)
             ->addIndexColumn()
             ->addColumn('foto', function ($row) {
-                $fotos = $row->Foto; // Ini sudah menjadi array karena $casts di Model
-                if (is_array($fotos) && !empty($fotos)) {
-                    $firstFotoUrl = url('images/' . $fotos[0]);
-                    // Siapkan semua URL foto untuk modal carousel
-                    $allPhotosUrls = array_map(fn($foto) => url('images/' . $foto), $fotos);
-                    $allPhotosJson = htmlspecialchars(json_encode($allPhotosUrls), ENT_QUOTES, 'UTF-8');
+                $photos = $row->Foto; // Ini sudah array karena casting di model
+                if (!empty($photos) && is_array($photos)) {
+                    $firstPhotoUrl = asset('images/' . $photos[0]);
+                    $photoUrls = array_map(function($photo) {
+                        return asset('images/' . $photo);
+                    }, $photos);
+                    $photosJson = htmlspecialchars(json_encode($photoUrls), ENT_QUOTES, 'UTF-8');
 
-                    return '<img src="' . $firstFotoUrl . '" alt="Foto Masalah" class="img-thumbnail" style="width: 100px; height: 100px; object-fit: cover; cursor:pointer;" data-bs-toggle="modal" data-bs-target="#modalFotoFull" data-photos=\'' . $allPhotosJson . '\'>';
+                    return '<img src="' . $firstPhotoUrl . '" alt="Foto Laporan" class="img-thumbnail" style="width: 100px; height: 100px; object-fit: cover; cursor:pointer;" data-bs-toggle="modal" data-bs-target="#modalFotoFull" data-photos=\'' . $photosJson . '\'>';
                 }
-                return '<img src="' . url('images/nophoto.jpg') . '" alt="Foto tidak tersedia" class="img-thumbnail" style="width: 100px; height: 100px; object-fit: cover;">';
+                return '<img src="' . asset('images/nophoto.jpg') . '" alt="Foto tidak tersedia" class="img-thumbnail" style="width: 100px; height: 100px; object-fit: cover;">';
             })
             ->editColumn('Tanggal', function ($row) {
                 return $row->created_at ? $row->created_at->format('Y-m-d H:i:s') : '';
             })
             ->addColumn('departemen', function ($row) {
-                if ($row->departemenSupervisor) {
-                    return $row->departemenSupervisor->departemen . '<br><small class="text-muted">' . $row->departemenSupervisor->supervisor . '</small>';
+                return $row->departemenSupervisor->departemen ?? '-';
+            })
+            ->addColumn('status', function ($row) {
+                $class = 'bg-secondary';
+                if ($row->status == 'Selesai') {
+                    $class = 'bg-success';
                 }
-                return '-';
+                return '<span class="badge ' . $class . '">' . $row->status . '</span>';
             })
             ->addColumn('penyelesaian', function ($row) {
                 if ($row->penyelesaian) {
-                    return '<button type="button" class="btn btn-success btn-sm lihat-penyelesaian-btn" data-id="' . $row->id . '" data-bs-toggle="modal" data-bs-target="#modalPenyelesaian">Lihat</button>';
+                    return '<button type="button" class="btn btn-info btn-sm lihat-penyelesaian-btn" data-id="' . $row->id . '" data-bs-toggle="modal" data-bs-target="#modalPenyelesaian">Lihat</button>';
                 }
-                return '<span class="text-muted">-</span>';
+                return '-';
             })
             ->addColumn('aksi', function ($row) {
-                $editBtn = '<a href="/edit' . $row->id . '" class="btn btn-sm btn-warning me-1" title="Edit"><i class="fas fa-edit"></i></a>';
-                $deleteBtn = '<button type="button" class="btn btn-sm btn-danger delete-btn" data-id="' . $row->id . '" data-delete-url="/laporan/' . $row->id . '/delete" data-return-url="' . url()->current() . '" title="Hapus"><i class="fas fa-trash"></i></button>';
+                $editBtn = '<a href="' . route('laporan.edit', $row->id) . '" class="btn btn-sm btn-warning me-1" title="Edit"><i class="fas fa-edit"></i></a>';
+                $deleteBtn = '<button type="button" class="btn btn-sm btn-danger delete-btn" data-id="' . $row->id . '" data-delete-url="' . route('laporan.destroy', ['id' => $row->id, 'ref' => 'sejarah']) . '" title="Hapus"><i class="fas fa-trash"></i></button>';
                 return $editBtn . $deleteBtn;
             })
-            ->rawColumns(['foto', 'departemen', 'penyelesaian', 'aksi'])
+            ->rawColumns(['foto', 'status', 'penyelesaian', 'aksi'])
             ->make(true);
     }
 
@@ -420,21 +423,19 @@ class laporanController extends Controller
         if (!$laporan || !$laporan->penyelesaian) {
             return response()->json(['success' => false, 'message' => 'Data penyelesaian tidak ditemukan.']);
         }
+
         $penyelesaian = $laporan->penyelesaian;
         $fotoUrls = [];
         
-        // PERBAIKAN: $penyelesaian->Foto sudah menjadi array karena casting di model
-        if (is_array($penyelesaian->Foto)) {
-            foreach ($penyelesaian->Foto as $file) {
-                if (!empty($file)) { // Pastikan nama file tidak kosong
-                    $fotoUrls[] = url('images/' . $file);
-                }
+        if (!empty($penyelesaian->Foto) && is_array($penyelesaian->Foto)) {
+            foreach ($penyelesaian->Foto as $foto) {
+                $fotoUrls[] = asset('images/' . $foto);
             }
         }
 
         return response()->json([
             'success' => true,
-            'Tanggal' => \Carbon\Carbon::parse($penyelesaian->Tanggal)->format('d-m-Y'),
+            'Tanggal' => $penyelesaian->Tanggal ? Carbon::parse($penyelesaian->Tanggal)->format('d F Y') : 'N/A',
             'deskripsi_penyelesaian' => $penyelesaian->deskripsi_penyelesaian,
             'Foto' => $fotoUrls, // Kirim sebagai array URL yang sudah benar
         ]);
