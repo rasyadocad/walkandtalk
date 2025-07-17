@@ -96,12 +96,13 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
     <script src="{{ asset('js/scripts.js') }}"></script>
     <script src="{{ asset('js/departemen-supervisor.js') }}"></script>
-    <script src="{{ asset('js/camera.js') }}"></script>
+    {{-- PASTIKAN BARIS INI DIHAPUS ATAU DI-COMMENT untuk menghindari konflik dengan skrip multi-foto --}}
+    {{-- <script src="{{ asset('js/camera.js') }}"></script> --}}
     <script src="{{ asset('js/filters.js') }}"></script>
     <script src="{{ asset('js/toast-init.js') }}"></script>
     <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
     <script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
-    <script src="{{ asset('js/datatables-init.js') }}"></script>
+    {{-- <script src="{{ asset('js/datatables-init.js') }}"></script> --}} {{-- NONAKTIFKAN INI --}}
     <script src="{{ asset('js/filter-icon.js') }}"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="{{ asset('js/delete-handler.js') }}"></script>

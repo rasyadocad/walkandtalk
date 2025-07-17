@@ -19,6 +19,15 @@ class Penyelesaian extends Model
         'deskripsi_penyelesaian',
     ];
 
+    /**
+     * The attributes that should be cast.
+     *
+     * @var array
+     */
+    protected $casts = [
+        'Foto' => 'array',
+    ];
+
     public function laporan()
     {
         return $this->belongsTo(\App\Models\laporan::class, 'laporan_id');

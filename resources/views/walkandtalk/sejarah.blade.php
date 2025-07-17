@@ -46,7 +46,19 @@
   <div class="modal-dialog modal-dialog-centered modal-lg">
     <div class="modal-content bg-transparent border-0">
       <div class="modal-body text-center p-0">
-        <img src="" id="imgPreviewFull" class="img-fluid rounded shadow" alt="Preview Foto" style="max-height:80vh;">
+        <div id="photoCarousel" class="carousel slide">
+          <div class="carousel-inner">
+            <!-- Carousel items will be injected here -->
+          </div>
+          <button class="carousel-control-prev" type="button" data-bs-target="#photoCarousel" data-bs-slide="prev">
+            <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+            <span class="visually-hidden">Previous</span>
+          </button>
+          <button class="carousel-control-next" type="button" data-bs-target="#photoCarousel" data-bs-slide="next">
+            <span class="carousel-control-next-icon" aria-hidden="true"></span>
+            <span class="visually-hidden">Next</span>
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -137,9 +149,8 @@ function ensureFilterButton() {
 }
 
 $(document).ready(function() {
-    // Store the original URL
     const originalUrl = $('#sejarahTable').data('url');
-    // Refresh table with filters function
+    
     window.refreshTable = function(filters = null) {
         if ($.fn.DataTable.isDataTable('#sejarahTable')) {
             $('#sejarahTable').DataTable().destroy();
@@ -159,37 +170,16 @@ $(document).ready(function() {
             serverSide: true,
             ajax: ajaxUrl,
             columns: [
-                {data: 'DT_RowIndex', name: 'DT_RowIndex'},
+                {data: 'DT_RowIndex', name: 'DT_RowIndex', orderable: false, searchable: false},
                 {data: 'Tanggal', name: 'Tanggal'},
-                {data: 'foto', name: 'foto', orderable: false},
+                {data: 'foto', name: 'foto', orderable: false, searchable: false},
                 {data: 'departemen', name: 'departemenSupervisor.departemen'},
                 {data: 'kategori_masalah', name: 'kategori_masalah'},
                 {data: 'deskripsi_masalah', name: 'deskripsi_masalah'},
                 {data: 'tenggat_waktu', name: 'tenggat_waktu'},
                 {data: 'status', name: 'status'},
-                {data: 'penyelesaian', name: 'penyelesaian', orderable: false},
-                {
-                    data: 'aksi', 
-                    name: 'aksi', 
-                    orderable: false, 
-                    searchable: false,
-                    render: function(data, type, row, meta) {
-                        let editBtn = `<a href="/edit${row.id}" class="btn btn-sm btn-warning me-1" title="Edit">
-                            <i class="fas fa-edit"></i>
-                        </a>`;
-                        
-                        let deleteBtn = `<button type="button" 
-                            class="btn btn-sm btn-danger delete-btn"
-                            data-id="${row.id}"
-                            data-delete-url="/laporan/${row.id}/delete"
-                            data-return-url="${window.location.pathname}"
-                            title="Hapus">
-                            <i class="fas fa-trash"></i>
-                        </button>`;
-                        
-                        return editBtn + deleteBtn;
-                    }
-                }
+                {data: 'penyelesaian', name: 'penyelesaian', orderable: false, searchable: false},
+                {data: 'aksi', name: 'aksi', orderable: false, searchable: false}
             ],
             order: [[1, 'desc']],
             language: {
@@ -206,16 +196,13 @@ $(document).ready(function() {
                     next: "Selanjutnya",
                     previous: "Sebelumnya"
                 }
+            },
+            drawCallback: function(settings) {
+                ensureFilterButton();
             }
         });
-        table.on('draw', function() {
-            $('img[data-bs-toggle="modal"]').on('click', function() {
-                var imgSrc = $(this).data('img-src');
-                $('#imgPreviewFull').attr('src', imgSrc);
-            });
-            ensureFilterButton();
-        });
-    }
+    };
+
     // Initial table load
     refreshTable();
 
@@ -223,30 +210,67 @@ $(document).ready(function() {
     ensureFilterButton();
     $('.dataTables_filter').addClass('d-flex align-items-center gap-2');
     $('.dataTables_filter label').addClass('mb-0');
-});
 
-$(document).on('click', '.lihat-penyelesaian-btn', function() {
-    var laporanId = $(this).data('id');
-    var modalBody = $('#modalPenyelesaianBody');
-    modalBody.html('<div class="text-center py-4"><div class="spinner-border text-primary"></div></div>');
-    $.get('/laporan/penyelesaian/' + laporanId, function(response) {
-        if (response.success) {
-            var html = '';
-            if (response.Tanggal) {
-                html += '<div class="mb-2"><strong>Tanggal Selesai:</strong> ' + response.Tanggal + '</div>';
-            }
-            if (response.Foto) {
-                html += '<div class="mb-2"><img src="' + response.Foto + '" alt="Foto Penyelesaian" class="img-fluid rounded shadow" style="max-width:300px;"></div>';
-            }
-            if (response.deskripsi_penyelesaian) {
-                html += '<div class="mb-2"><strong>Deskripsi:</strong><br>' + response.deskripsi_penyelesaian + '</div>';
-            }
-            modalBody.html(html);
-        } else {
-            modalBody.html('<div class="alert alert-warning mb-0">Tidak ada data penyelesaian.</div>');
+    // === EVENT DELEGATION UNTUK MODAL ===
+
+    // 1. Modal untuk Galeri Foto Masalah (Carousel)
+    $(document).on('click', 'img[data-bs-toggle="modal"][data-bs-target="#modalFotoFull"]', function() {
+        const photos = $(this).data('photos');
+        const carouselInner = $('#photoCarousel .carousel-inner');
+        carouselInner.empty(); // Hapus foto lama
+
+        if (photos && Array.isArray(photos) && photos.length > 0) {
+            photos.forEach((photoUrl, index) => {
+                const activeClass = index === 0 ? 'active' : '';
+                carouselInner.append(`
+                    <div class="carousel-item ${activeClass}">
+                        <img src="${photoUrl}" class="d-block w-100 img-fluid rounded shadow" style="max-height:80vh; object-fit: contain;" alt="Foto Laporan">
+                    </div>
+                `);
+            });
         }
-    }).fail(function() {
-        modalBody.html('<div class="alert alert-danger mb-0">Gagal mengambil data penyelesaian.</div>');
+        $('#photoCarousel .carousel-control-prev, #photoCarousel .carousel-control-next').toggle(photos && photos.length > 1);
+    });
+
+    // 2. Modal untuk Detail Penyelesaian
+    $(document).on('click', '.lihat-penyelesaian-btn', function() {
+        var laporanId = $(this).data('id');
+        var modalBody = $('#modalPenyelesaianBody');
+        modalBody.html('<div class="text-center py-4"><div class="spinner-border text-primary"></div></div>');
+        
+        $.get('/laporan/penyelesaian/' + laporanId, function(response) {
+            if (response.success) {
+                var html = '';
+                if (response.Tanggal) {
+                    html += '<div class="mb-3"><strong>Tanggal Selesai:</strong> ' + response.Tanggal + '</div>';
+                }
+                if (response.deskripsi_penyelesaian) {
+                    html += '<div class="mb-3"><strong>Deskripsi:</strong><br><p class="mb-0">' + response.deskripsi_penyelesaian + '</p></div>';
+                }
+                
+                // PERBAIKAN: Logika untuk menampilkan galeri foto penyelesaian
+                html += '<strong>Foto Penyelesaian:</strong>';
+                if (response.Foto && Array.isArray(response.Foto) && response.Foto.length > 0) {
+                    html += '<div class="d-flex flex-wrap gap-2 mt-2">';
+                    response.Foto.forEach(function(fotoUrl) {
+                        // Tampilkan sebagai thumbnail yang bisa diklik untuk membuka di tab baru
+                        html += `
+                            <a href="${fotoUrl}" target="_blank" rel="noopener noreferrer" title="Lihat gambar penuh">
+                                <img src="${fotoUrl}" alt="Foto Penyelesaian" class="img-thumbnail" style="width:120px; height:120px; object-fit:cover;">
+                            </a>
+                        `;
+                    });
+                    html += '</div>';
+                } else {
+                    html += '<p class="text-muted mt-1">Tidak ada foto penyelesaian yang diunggah.</p>';
+                }
+                modalBody.html(html);
+            } else {
+                modalBody.html('<div class="alert alert-warning mb-0">' + (response.message || 'Tidak ada data penyelesaian untuk laporan ini.') + '</div>');
+            }
+        }).fail(function() {
+            modalBody.html('<div class="alert alert-danger mb-0">Gagal mengambil data penyelesaian. Silakan coba lagi.</div>');
+        });
     });
 });
 </script>

@@ -22,6 +22,15 @@ class laporan extends Model
         'status',
     ];
 
+    /**
+     * The attributes that should be cast.
+     *
+     * @var array
+     */
+    protected $casts = [
+        'Foto' => 'array',
+    ];
+
     public function penyelesaian()
     {
         return $this->hasOne(\App\Models\Penyelesaian::class, 'laporan_id');

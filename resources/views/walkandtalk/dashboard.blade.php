@@ -64,7 +64,19 @@
   <div class="modal-dialog modal-dialog-centered modal-lg">
     <div class="modal-content bg-transparent border-0">
       <div class="modal-body text-center p-0">
-        <img src="" id="imgPreviewFull" class="img-fluid rounded shadow" alt="Preview Foto" style="max-height:80vh;">
+        <div id="photoCarousel" class="carousel slide">
+          <div class="carousel-inner">
+            <!-- Carousel items will be injected here -->
+          </div>
+          <button class="carousel-control-prev" type="button" data-bs-target="#photoCarousel" data-bs-slide="prev">
+            <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+            <span class="visually-hidden">Previous</span>
+          </button>
+          <button class="carousel-control-next" type="button" data-bs-target="#photoCarousel" data-bs-slide="next">
+            <span class="carousel-control-next-icon" aria-hidden="true"></span>
+            <span class="visually-hidden">Next</span>
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -85,9 +97,8 @@ function ensureFilterButton() {
 }
 
 $(document).ready(function() {
-    // Store the original URL
     const originalUrl = $('#laporanTable').data('url');
-    // Refresh table with filters function
+    
     window.refreshTable = function(filters = null) {
         if ($.fn.DataTable.isDataTable('#laporanTable')) {
             $('#laporanTable').DataTable().destroy();
@@ -157,18 +168,42 @@ $(document).ready(function() {
                 }
             }
         });
-        table.on('draw', function() {
-            $('img[data-bs-toggle="modal"]').on('click', function() {
-                var imgSrc = $(this).data('img-src');
-                $('#imgPreviewFull').attr('src', imgSrc);
-            });
-            ensureFilterButton(); // <-- PENTING: panggil setiap draw
-        });
-    }
-    // Initial table load
-    refreshTable();
 
-    // Pindahkan tombol filter ke sebelum input "Cari:"
+        table.off('draw.dt'); // Hapus event handler lama untuk menghindari duplikasi
+        table.on('draw.dt', function() {
+            // Pindahkan event handler klik ke body untuk delegasi
+            ensureFilterButton();
+        });
+    };
+
+    // Gunakan event delegation untuk modal
+    $(document).on('click', 'img[data-bs-toggle="modal"][data-bs-target="#modalFotoFull"]', function() {
+        const photos = $(this).data('photos');
+        const carouselInner = $('#photoCarousel .carousel-inner');
+        carouselInner.empty(); // Hapus foto lama
+
+        if (photos && Array.isArray(photos) && photos.length > 0) {
+            photos.forEach((photoUrl, index) => {
+                const activeClass = index === 0 ? 'active' : '';
+                carouselInner.append(`
+                    <div class="carousel-item ${activeClass}">
+                        <img src="${photoUrl}" class="d-block w-100 img-fluid rounded shadow" style="max-height:80vh; object-fit: contain;" alt="Foto Laporan">
+                    </div>
+                `);
+            });
+        } else {
+            // Fallback jika tidak ada data foto
+            carouselInner.append(`
+                <div class="carousel-item active">
+                    <img src="{{ url('images/nophoto.jpg') }}" class="d-block w-100" alt="Foto tidak tersedia">
+                </div>
+            `);
+        }
+        // Tampilkan/sembunyikan tombol navigasi carousel
+        $('#photoCarousel .carousel-control-prev, #photoCarousel .carousel-control-next').toggle(photos && photos.length > 1);
+    });
+
+    refreshTable(); // Panggil untuk memuat tabel pertama kali
     ensureFilterButton();
     $('.dataTables_filter').addClass('d-flex align-items-center gap-2');
     $('.dataTables_filter label').addClass('mb-0');

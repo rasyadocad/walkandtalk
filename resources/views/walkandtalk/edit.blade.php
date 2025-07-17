@@ -11,18 +11,29 @@
             @method('PUT')
 
             <div class="mb-3">
-                <label for="Foto" class="form-label">Foto:</label>
-                <input type="file" class="form-control" id="Foto" name="Foto">
-                @if($laporan->Foto)
-                    <img src="{{ url('images/' . $laporan->Foto) }}" alt="Foto" class="img-thumbnail mt-2" style="width: 100px;">
-                @endif
-                <button type="button" class="btn btn-secondary mt-2" id="openCameraBtn">Ambil Foto</button>
-                <div id="cameraContainer" style="display:none; margin-top:10px;">
-                    <video id="video" autoplay playsinline style="width:100%; max-width:350px; border:1px solid #ccc; border-radius:8px;"></video>
-                    <canvas id="canvas" style="display:none;"></canvas>
-                    <div class="mt-2">
-                        <button type="button" class="btn btn-success" id="captureBtn">Gunakan Foto</button>
-                        <button type="button" class="btn btn-danger" id="closeCameraBtn">Tutup Kamera</button>
+                <label for="Foto" class="form-label">Tambah Foto Baru (Total maks. 5 foto):</label>
+                <input type="file" class="form-control @error('Foto.*') is-invalid @enderror" id="Foto" name="Foto[]" multiple>
+                @error('Foto.*')
+                    <div class="invalid-feedback">{{ $message }}</div>
+                @enderror
+                @error('Foto')
+                     <div class="invalid-feedback d-block">{{ $message }}</div>
+                @enderror
+                
+                <div class="mt-3">
+                    <label class="form-label">Foto Saat Ini:</label>
+                    <div id="current-photos" class="d-flex flex-wrap gap-2">
+                        @if($laporan->Foto && is_array($laporan->Foto))
+                            @forelse($laporan->Foto as $foto)
+                                <div class="position-relative">
+                                    <img src="{{ url('images/' . $foto) }}" alt="Foto" class="img-thumbnail" style="width: 100px; height: 100px; object-fit: cover;">
+                                    <input type="hidden" name="existing_photos[]" value="{{ $foto }}">
+                                    <button type="button" class="btn btn-danger btn-sm remove-photo" style="position:absolute; top:0; right:0;">&times;</button>
+                                </div>
+                            @empty
+                                <p>Tidak ada foto yang diunggah.</p>
+                            @endforelse
+                        @endif
                     </div>
                 </div>
             </div>
@@ -81,3 +92,78 @@
     </div>
 </div>
 @endsection
+
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const fotoInput = document.getElementById('Foto');
+    const previewContainer = document.getElementById('foto-preview-container');
+    const currentPhotosContainer = document.getElementById('current-photos');
+    let files = [];
+    const MAX_FILES = 5;
+
+    fotoInput.addEventListener('change', function(event) {
+        const newFiles = Array.from(event.target.files);
+        
+        if (newFiles.length > 0) {
+            // Sembunyikan foto lama jika ada file baru yang dipilih
+            currentPhotosContainer.style.display = 'none';
+        } else {
+            currentPhotosContainer.style.display = 'flex';
+        }
+
+        if (newFiles.length > MAX_FILES) {
+            alert(`Anda hanya dapat mengunggah maksimal ${MAX_FILES} foto.`);
+            fotoInput.value = ''; // Reset input
+            previewContainer.innerHTML = ''; // Hapus pratinjau
+            currentPhotosContainer.style.display = 'flex'; // Tampilkan lagi foto lama
+            return;
+        }
+        
+        files = newFiles;
+        renderPreviews();
+    });
+
+    function renderPreviews() {
+        previewContainer.innerHTML = '';
+        files.forEach((file) => {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = document.createElement('img');
+                img.src = e.target.result;
+                img.style.width = '100px';
+                img.style.height = '100px';
+                img.style.objectFit = 'cover';
+                img.className = 'img-thumbnail';
+                previewContainer.appendChild(img);
+            }
+            reader.readAsDataURL(file);
+        });
+    }
+
+    // Hapus foto yang ada
+    document.querySelectorAll('.remove-photo').forEach(button => {
+        button.addEventListener('click', function() {
+            const photoContainer = this.closest('.position-relative');
+            const fotoName = photoContainer.querySelector('input[type="hidden"]').value;
+
+            // Hapus dari daftar foto yang ada
+            currentPhotosContainer.removeChild(photoContainer);
+
+            // Tambah input hidden untuk foto yang dihapus
+            const deletedPhotosInput = document.getElementById('deleted-photos');
+            if (deletedPhotosInput) {
+                deletedPhotosInput.value += `${fotoName},`;
+            } else {
+                const newDeletedPhotosInput = document.createElement('input');
+                newDeletedPhotosInput.type = 'hidden';
+                newDeletedPhotosInput.name = 'deleted_photos';
+                newDeletedPhotosInput.id = 'deleted-photos';
+                newDeletedPhotosInput.value = `${fotoName},`;
+                fotoInput.closest('form').appendChild(newDeletedPhotosInput);
+            }
+        });
+    });
+});
+</script>
+@endpush

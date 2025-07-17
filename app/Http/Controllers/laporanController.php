@@ -31,46 +31,53 @@ class laporanController extends Controller
     public function store(Request $request)
     {
         $messages = [
-            'Foto.image' => 'File yang diunggah harus berupa foto/gambar.',
-            'Foto.mimes' => 'Format foto tidak sesuai. Gunakan format: JPG, PNG, JPEG, GIF, atau SVG.',
-            'Foto.max' => 'Ukuran foto terlalu besar. Maksimal 2MB.',
-            'departemen_supervisor_id.required' => 'Mohon pilih departemen untuk menentukan penanggung jawab masalah.',
-            'departemen_supervisor_id.exists' => 'Departemen yang dipilih tidak valid. Silakan pilih dari daftar yang tersedia.',
-            'kategori_masalah.required' => 'Mohon pilih kategori masalah untuk klasifikasi yang tepat.',
-            'deskripsi_masalah.required' => 'Mohon berikan deskripsi masalah agar dapat dipahami dengan jelas.',
-            'tenggat_waktu.required' => 'Mohon tentukan tenggat waktu penyelesaian masalah.',
-            'tenggat_waktu.date' => 'Format tanggal tenggat waktu tidak valid. Gunakan format yang sesuai.'
+            'Foto.*.image' => 'Semua file yang diunggah harus berupa gambar.',
+            'Foto.*.mimes' => 'Format foto tidak valid. Gunakan: JPG, PNG, JPEG, GIF, SVG.',
+            'Foto.*.max' => 'Ukuran setiap foto tidak boleh lebih dari 2MB.',
+            'Foto.max' => 'Anda hanya dapat mengunggah maksimal 5 foto.',
+            'departemen_supervisor_id.required' => 'Mohon pilih departemen.',
+            'kategori_masalah.required' => 'Mohon pilih kategori masalah.',
+            'deskripsi_masalah.required' => 'Mohon berikan deskripsi masalah.',
+            'tenggat_waktu.required' => 'Mohon tentukan tenggat waktu.',
         ];
 
         $request->validate([
-            'Foto' => 'nullable|image|mimes:jpg,png,jpeg,gif,svg|max:2048',
+            'Foto' => 'nullable|array|max:5',
+            'Foto.*' => 'image|mimes:jpg,png,jpeg,gif,svg|max:2048',
             'departemen_supervisor_id' => 'required|exists:departemen_supervisors,id',
             'kategori_masalah' => 'required|string',
             'deskripsi_masalah' => 'required|string',
             'tenggat_waktu' => 'required|date',
         ], $messages);
 
-        // Proses upload foto (jika ada)
-        $fileName = null;
+
+        $fotoFileNames = [];
         if ($request->hasFile('Foto')) {
-            $fileName = 'Foto-' . uniqid() . '.' . $request->Foto->extension();
-            $request->Foto->move(public_path('images'), $fileName);
+            foreach ($request->file('Foto') as $file) {
+                $fileName = 'Foto-' . uniqid() . '.' . $file->extension();
+                $file->move(public_path('images'), $fileName);
+                $fotoFileNames[] = $fileName;
+            }
         }
 
-        // Simpan data ke database
         $laporan = laporan::create([
-            'Foto' => $fileName,
+            'Foto' => $fotoFileNames, // Langsung berikan array, model akan handle encoding
             'departemen_supervisor_id' => $request->departemen_supervisor_id,
             'kategori_masalah' => $request->kategori_masalah,
             'deskripsi_masalah' => $request->deskripsi_masalah,
             'tenggat_waktu' => $request->tenggat_waktu,
-            'status' => 'Ditugaskan', // Set status default
+            'status' => 'Ditugaskan',
         ]);
 
         // Kirim email ke supervisor
         $supervisor = $laporan->departemenSupervisor;
         if ($supervisor && $supervisor->email) {
-            Mail::to($supervisor->email)->send(new LaporanDitugaskanSupervisor($laporan));
+            try {
+                Mail::to($supervisor->email)->send(new LaporanDitugaskanSupervisor($laporan));
+            } catch (\Exception $e) {
+                // Log error jika pengiriman email gagal
+                \Log::error("Gagal mengirim email notifikasi: " . $e->getMessage());
+            }
         }
 
         // Redirect dengan pesan sukses
@@ -87,9 +94,10 @@ class laporanController extends Controller
     public function update(Request $request, $id)
     {
         $messages = [
-            'Foto.image' => 'File yang diunggah harus berupa foto/gambar.',
-            'Foto.mimes' => 'Format foto tidak sesuai. Gunakan format: JPG, PNG, JPEG, GIF, atau SVG.',
-            'Foto.max' => 'Ukuran foto terlalu besar. Maksimal 2MB.',
+            'Foto.*.image' => 'Semua file yang diunggah harus berupa gambar.',
+            'Foto.*.mimes' => 'Format foto tidak valid. Gunakan: JPG, PNG, JPEG, GIF, SVG.',
+            'Foto.*.max' => 'Ukuran setiap foto tidak boleh lebih dari 2MB.',
+            'Foto.max' => 'Jumlah total foto tidak boleh lebih dari 5.',
             'departemen_supervisor_id.required' => 'Mohon pilih departemen untuk menentukan penanggung jawab masalah.',
             'departemen_supervisor_id.exists' => 'Departemen yang dipilih tidak valid. Silakan pilih dari daftar yang tersedia.',
             'kategori_masalah.required' => 'Mohon pilih kategori masalah untuk klasifikasi yang tepat.',
@@ -100,7 +108,8 @@ class laporanController extends Controller
         ];
 
         $request->validate([
-            'Foto' => 'nullable|image|mimes:jpg,png,jpeg,gif,svg|max:2048',
+            'Foto' => 'nullable|array',
+            'Foto.*' => 'image|mimes:jpg,png,jpeg,gif,svg|max:2048',
             'departemen_supervisor_id' => 'required|exists:departemen_supervisors,id',
             'kategori_masalah' => 'required|string',
             'deskripsi_masalah' => 'required|string',
@@ -111,23 +120,35 @@ class laporanController extends Controller
         // Cari laporan berdasarkan ID
         $laporan = laporan::findOrFail($id);
 
-        // Proses upload foto (jika ada)
-        if ($request->hasFile('Foto')) {
-            // Hapus foto lama jika ada
-            if ($laporan->Foto && file_exists(public_path('images/' . $laporan->Foto))) {
-                unlink(public_path('images/' . $laporan->Foto));
-            }
+        $existingPhotos = $request->input('existing_photos', []);
+        $newlyUploadedPhotos = [];
 
-            // Simpan foto baru
-            $fileName = 'Foto-' . uniqid() . '.' . $request->Foto->extension();
-            $request->Foto->move(public_path('images'), $fileName);
-        } else {
-            $fileName = $laporan->Foto; // Gunakan foto lama jika tidak ada foto baru
+        if ($request->hasFile('Foto')) {
+            foreach ($request->file('Foto') as $file) {
+                $fileName = 'Foto-' . uniqid() . '.' . $file->extension();
+                $file->move(public_path('images'), $fileName);
+                $newlyUploadedPhotos[] = $fileName;
+            }
+        }
+
+        $allPhotos = array_merge($existingPhotos, $newlyUploadedPhotos);
+        
+        if (count($allPhotos) > 5) {
+            return back()->withErrors(['Foto' => 'Jumlah total foto tidak boleh lebih dari 5.'])->withInput();
+        }
+
+        // Hapus file foto lama yang tidak ada di `existing_photos`
+        $oldPhotos = json_decode($laporan->Foto, true) ?: [];
+        $photosToDelete = array_diff($oldPhotos, $existingPhotos);
+        foreach ($photosToDelete as $photo) {
+            if (file_exists(public_path('images/' . $photo))) {
+                unlink(public_path('images/' . $photo));
+            }
         }
 
         // Perbarui data di database
         $laporan->update([
-            'Foto' => $fileName,
+            'Foto' => json_encode($allPhotos),
             'departemen_supervisor_id' => $request->departemen_supervisor_id,
             'kategori_masalah' => $request->kategori_masalah,
             'deskripsi_masalah' => $request->deskripsi_masalah,
@@ -146,14 +167,25 @@ class laporanController extends Controller
             $laporan = laporan::findOrFail($id);
             
             // Hapus file foto laporan jika ada
-            if ($laporan->Foto && file_exists(public_path('images/' . $laporan->Foto))) {
-                unlink(public_path('images/' . $laporan->Foto));
+            $fotoFiles = json_decode($laporan->Foto, true);
+            if (is_array($fotoFiles)) {
+                foreach ($fotoFiles as $file) {
+                    if ($file && file_exists(public_path('images/' . $file))) {
+                        unlink(public_path('images/' . $file));
+                    }
+                }
             }
             
             // Cek dan hapus penyelesaian terkait jika ada
             if ($laporan->penyelesaian) {
-                if ($laporan->penyelesaian->Foto && file_exists(public_path('images/' . $laporan->penyelesaian->Foto))) {
-                    unlink(public_path('images/' . $laporan->penyelesaian->Foto));
+                // Hapus foto penyelesaian
+                $fotoPenyelesaian = json_decode($laporan->penyelesaian->Foto, true);
+                 if (is_array($fotoPenyelesaian)) {
+                    foreach ($fotoPenyelesaian as $file) {
+                        if ($file && file_exists(public_path('images/' . $file))) {
+                            unlink(public_path('images/' . $file));
+                        }
+                    }
                 }
                 $laporan->penyelesaian->delete(); // Soft delete penyelesaian
             }
@@ -231,60 +263,51 @@ class laporanController extends Controller
         ];
 
         $messages = [
-            'status.required' => 'Silakan pilih status tindakan yang akan dilakukan',
-            'status.in' => 'Status yang dipilih tidak valid. Silakan pilih dari opsi yang tersedia'
+            'status.required' => 'Silakan pilih status tindakan.',
+            'status.in' => 'Status yang dipilih tidak valid.'
         ];
 
-        // Jika status Selesai, tambahkan validasi tambahan
         if ($request->status === 'Selesai') {
             $rules['Tanggal'] = 'required|date';
-            $rules['deskripsi_penyelesaian'] = 'required|string|max:500';
-            $rules['Foto'] = 'nullable|image|mimes:jpg,png,jpeg,gif,svg|max:2048';
+            $rules['deskripsi_penyelesaian'] = 'required|string|max:1000';
+            $rules['Foto'] = 'nullable|array|max:5';
+            $rules['Foto.*'] = 'image|mimes:jpg,png,jpeg,gif,svg|max:2048';
 
             $messages += [
-                'Tanggal.required' => 'Mohon isi tanggal penyelesaian untuk dokumentasi',
-                'Tanggal.date' => 'Format tanggal tidak valid',
-                'deskripsi_penyelesaian.required' => 'Mohon berikan deskripsi penyelesaian yang telah dilakukan',
-                'deskripsi_penyelesaian.max' => 'Deskripsi terlalu panjang (maksimal 500 karakter)',
-                'Foto.image' => 'File yang diunggah harus berupa foto/gambar',
-                'Foto.mimes' => 'Format foto harus JPG, PNG, JPEG, GIF, atau SVG',
-                'Foto.max' => 'Ukuran foto maksimal 2MB'
+                'Tanggal.required' => 'Tanggal penyelesaian wajib diisi.',
+                'deskripsi_penyelesaian.required' => 'Deskripsi penyelesaian wajib diisi.',
+                'Foto.max' => 'Anda hanya dapat mengunggah maksimal 5 foto penyelesaian.',
+                'Foto.*.image' => 'File penyelesaian harus berupa gambar.',
+                'Foto.*.mimes' => 'Format foto penyelesaian tidak valid.',
+                'Foto.*.max' => 'Ukuran setiap foto penyelesaian maksimal 2MB.',
             ];
         }
 
-        $validator = $request->validate($rules, $messages);
+        $request->validate($rules, $messages);
 
-        // Proses data setelah validasi berhasil
         $laporan = laporan::findOrFail($id);
         
-        if ($request->status !== 'Selesai') {
-            $laporan->update([
-                'status' => $request->status
-            ]);
-        } else {
-            // Update laporan with just the date for penyelesaian
-            $laporan->update([
-                'status' => $request->status,
-                'Tanggal' => $request->Tanggal // Store just the date
-            ]);
-
-            // Create penyelesaian record
-            if ($request->filled('deskripsi_penyelesaian')) {
-                $penyelesaianData = [
-                    'laporan_id' => $laporan->id,
-                    'deskripsi_penyelesaian' => $request->deskripsi_penyelesaian,
-                    'Tanggal' => $request->Tanggal // Store just the date
-                ];
-
-                if ($request->hasFile('Foto')) {
-                    $fileName = 'Penyelesaian-' . uniqid() . '.' . $request->Foto->extension();
-                    $request->Foto->move(public_path('images'), $fileName);
-                    $penyelesaianData['Foto'] = $fileName;
+        if ($request->status === 'Selesai') {
+            $fotoPenyelesaianNames = [];
+            if ($request->hasFile('Foto')) {
+                foreach ($request->file('Foto') as $file) {
+                    $fileName = 'Penyelesaian-' . uniqid() . '.' . $file->extension();
+                    $file->move(public_path('images'), $fileName);
+                    $fotoPenyelesaianNames[] = $fileName;
                 }
-
-                Penyelesaian::create($penyelesaianData);
             }
+
+            Penyelesaian::updateOrCreate(
+                ['laporan_id' => $laporan->id],
+                [
+                    'Tanggal' => $request->Tanggal,
+                    'deskripsi_penyelesaian' => $request->deskripsi_penyelesaian,
+                    'Foto' => $fotoPenyelesaianNames // PERBAIKAN: Berikan array langsung, bukan JSON string
+                ]
+            );
         }
+
+        $laporan->update(['status' => $request->status]);
 
         return redirect()->route('dashboard')->with('success', 'Status laporan berhasil diperbarui.');
     }
@@ -294,72 +317,47 @@ class laporanController extends Controller
         $query = laporan::with(['departemenSupervisor', 'penyelesaian'])
             ->where('status', '!=', 'Selesai');
 
-        // Apply filters
         $query = $this->applyFilters($request, $query);
 
         return DataTables::of($query)
             ->addIndexColumn()
             ->addColumn('foto', function ($row) {
-                if ($row->Foto && file_exists(public_path('images/' . $row->Foto))) {
-                    $imgUrl = url('images/' . $row->Foto);
-                    return '<img src="' . $imgUrl . '" alt="Foto" class="img-thumbnail" style="width: 100px;" 
-                            data-bs-toggle="modal" data-bs-target="#modalFotoFull" data-img-src="' . $imgUrl . '">';
+                $fotos = $row->Foto; // Ini sudah menjadi array karena $casts di Model
+                if (is_array($fotos) && !empty($fotos)) {
+                    $firstFotoUrl = url('images/' . $fotos[0]);
+                    // Siapkan semua URL foto untuk modal carousel
+                    $allPhotosUrls = array_map(fn($foto) => url('images/' . $foto), $fotos);
+                    $allPhotosJson = htmlspecialchars(json_encode($allPhotosUrls), ENT_QUOTES, 'UTF-8');
+
+                    return '<img src="' . $firstFotoUrl . '" alt="Foto Masalah" class="img-thumbnail" style="width: 100px; height: 100px; object-fit: cover; cursor:pointer;" data-bs-toggle="modal" data-bs-target="#modalFotoFull" data-photos=\'' . $allPhotosJson . '\'>';
                 }
-                return '<img src="' . url('images/nophoto.jpg') . '" alt="Foto tidak tersedia" class="img-thumbnail" style="width: 100px;">';
+                return '<img src="' . url('images/nophoto.jpg') . '" alt="Foto tidak tersedia" class="img-thumbnail" style="width: 100px; height: 100px; object-fit: cover;">';
             })
             ->addColumn('departemen', function ($row) {
-                return $row->departemenSupervisor->departemen . ': ' . $row->departemenSupervisor->supervisor;
-            })
-            ->addColumn('kategori_masalah', function ($row) {
-                $categories = explode(':', $row->kategori_masalah, 2);
-                $prefix = trim($categories[0]);
-                $description = isset($categories[1]) ? trim($categories[1]) : '';
-                
-                $badges = '';
-                switch ($prefix) {
-                    case 'Safety':
-                        $badges = '<span class="badge bg-danger">' . $prefix . '</span>';
-                        break;
-                    case 'Seiri':
-                    case 'Seiton':
-                    case 'Seiso':
-                    case 'Seiketsu':
-                    case 'Shitsuke':
-                        $badges = '<span class="badge bg-primary">' . $prefix . '</span>';
-                        break;
-                    default:
-                        $badges = '<span class="badge bg-secondary">' . $prefix . '</span>';
+                if ($row->departemenSupervisor) {
+                    return $row->departemenSupervisor->departemen . '<br><small class="text-muted">' . $row->departemenSupervisor->supervisor . '</small>';
                 }
-                
-                return $badges . ' ' . $description;
-            })
-            ->addColumn('status', function ($row) {
-                $class = 'bg-secondary';
-                switch ($row->status) {
-                    case 'Ditugaskan':
-                        $class = 'bg-warning text-dark';
-                        break;
-                    case 'Proses':
-                        $class = 'bg-info text-dark';
-                        break;
-                    case 'Selesai':
-                        $class = 'bg-success';
-                        break;
-                }
-                return '<span class="badge ' . $class . '">' . $row->status . '</span>';
-            })
-            ->addColumn('penyelesaian', function ($row) {
-                return '<a href="' . route('laporan.tindakan', $row->id) . '" class="btn btn-primary btn-sm">Tindakan</a>';
-            })
-            ->addColumn('aksi', function ($row) {
-                $editBtn = '<a href="' . route('index.edit', $row->id) . '" class="btn btn-secondary btn-sm me-1"><i class="fas fa-edit"></i></a>';
-                $deleteBtn = '<button type="button" class="btn btn-danger btn-sm delete-button" data-id="' . $row->id . '" data-bs-toggle="modal" data-bs-target="#deleteModal"><i class="fas fa-trash"></i></button>';
-                return $editBtn . $deleteBtn;
+                return '-';
             })
             ->editColumn('Tanggal', function ($row) {
                 return $row->created_at ? $row->created_at->format('Y-m-d H:i:s') : '';
             })
-            ->rawColumns(['foto', 'kategori_masalah', 'status', 'penyelesaian', 'aksi'])
+            ->addColumn('status', function ($row) {
+                $class = 'bg-secondary';
+                if ($row->status == 'Ditugaskan') $class = 'bg-warning text-dark';
+                if ($row->status == 'Proses') $class = 'bg-primary';
+                if ($row->status == 'Selesai') $class = 'bg-success';
+                return '<span class="badge ' . $class . '">' . $row->status . '</span>';
+            })
+            ->addColumn('penyelesaian', function ($row) {
+                return '<a href="' . route('laporan.tindakan', $row->id) . '" class="btn btn-purple btn-sm">Tindakan</a>';
+            })
+            ->addColumn('aksi', function ($row) {
+                $editBtn = '<a href="/edit' . $row->id . '" class="btn btn-sm btn-warning me-1" title="Edit"><i class="fas fa-edit"></i></a>';
+                $deleteBtn = '<button type="button" class="btn btn-sm btn-danger delete-btn" data-id="' . $row->id . '" data-delete-url="/laporan/' . $row->id . '/delete" data-return-url="' . url()->current() . '" title="Hapus"><i class="fas fa-trash"></i></button>';
+                return $editBtn . $deleteBtn;
+            })
+            ->rawColumns(['foto', 'departemen', 'status', 'penyelesaian', 'aksi'])
             ->make(true);
     }
 
@@ -368,65 +366,43 @@ class laporanController extends Controller
         $query = laporan::with(['departemenSupervisor', 'penyelesaian'])
             ->where('status', 'Selesai');
         
-        // Apply filters
         $query = $this->applyFilters($request, $query);
 
         return DataTables::of($query)
             ->addIndexColumn()
             ->addColumn('foto', function ($row) {
-                if ($row->Foto && file_exists(public_path('images/' . $row->Foto))) {
-                    $imgUrl = url('images/' . $row->Foto);
-                    return '<img src="' . $imgUrl . '" alt="Foto" class="img-thumbnail" style="width: 100px;" 
-                            data-bs-toggle="modal" data-bs-target="#modalFotoFull" data-img-src="' . $imgUrl . '">';
+                $fotos = $row->Foto; // Ini sudah menjadi array karena $casts di Model
+                if (is_array($fotos) && !empty($fotos)) {
+                    $firstFotoUrl = url('images/' . $fotos[0]);
+                    // Siapkan semua URL foto untuk modal carousel
+                    $allPhotosUrls = array_map(fn($foto) => url('images/' . $foto), $fotos);
+                    $allPhotosJson = htmlspecialchars(json_encode($allPhotosUrls), ENT_QUOTES, 'UTF-8');
+
+                    return '<img src="' . $firstFotoUrl . '" alt="Foto Masalah" class="img-thumbnail" style="width: 100px; height: 100px; object-fit: cover; cursor:pointer;" data-bs-toggle="modal" data-bs-target="#modalFotoFull" data-photos=\'' . $allPhotosJson . '\'>';
                 }
-                return '<img src="' . url('images/nophoto.jpg') . '" alt="Foto tidak tersedia" class="img-thumbnail" style="width: 100px;">';
+                return '<img src="' . url('images/nophoto.jpg') . '" alt="Foto tidak tersedia" class="img-thumbnail" style="width: 100px; height: 100px; object-fit: cover;">';
             })
             ->editColumn('Tanggal', function ($row) {
                 return $row->created_at ? $row->created_at->format('Y-m-d H:i:s') : '';
             })
             ->addColumn('departemen', function ($row) {
-                return $row->departemenSupervisor->departemen . ': ' . $row->departemenSupervisor->supervisor;
-            })
-            ->addColumn('kategori_masalah', function ($row) {
-                $categories = explode(':', $row->kategori_masalah, 2);
-                $prefix = trim($categories[0]);
-                $description = isset($categories[1]) ? trim($categories[1]) : '';
-                
-                $badges = '';
-                switch ($prefix) {
-                    case 'Safety':
-                        $badges = '<span class="badge bg-danger">' . $prefix . '</span>';
-                        break;
-                    case 'Seiri':
-                    case 'Seiton':
-                    case 'Seiso':
-                    case 'Seiketsu':
-                    case 'Shitsuke':
-                        $badges = '<span class="badge bg-primary">' . $prefix . '</span>';
-                        break;
-                    default:
-                        $badges = '<span class="badge bg-secondary">' . $prefix . '</span>';
+                if ($row->departemenSupervisor) {
+                    return $row->departemenSupervisor->departemen . '<br><small class="text-muted">' . $row->departemenSupervisor->supervisor . '</small>';
                 }
-                
-                return $badges . ' ' . $description;
-            })
-            ->addColumn('status', function ($row) {
-                return '<span class="badge bg-success">Selesai</span>';
+                return '-';
             })
             ->addColumn('penyelesaian', function ($row) {
                 if ($row->penyelesaian) {
-                    return '<button type="button" class="btn btn-info btn-sm lihat-penyelesaian-btn" data-id="' . $row->id . '" data-bs-toggle="modal" data-bs-target="#modalPenyelesaian">
-                                <i class="fas fa-eye me-1"></i>Lihat
-                            </button>';
+                    return '<button type="button" class="btn btn-success btn-sm lihat-penyelesaian-btn" data-id="' . $row->id . '" data-bs-toggle="modal" data-bs-target="#modalPenyelesaian">Lihat</button>';
                 }
-                return '<span class="text-muted">Tidak ada data</span>';
+                return '<span class="text-muted">-</span>';
             })
             ->addColumn('aksi', function ($row) {
-                $editBtn = '<a href="' . route('index.edit', $row->id) . '" class="btn btn-secondary btn-sm me-1"><i class="fas fa-edit"></i></a>';
-                $deleteBtn = '<button type="button" class="btn btn-danger btn-sm delete-button" data-id="' . $row->id . '" data-ref="sejarah" data-bs-toggle="modal" data-bs-target="#deleteModal"><i class="fas fa-trash"></i></button>';
+                $editBtn = '<a href="/edit' . $row->id . '" class="btn btn-sm btn-warning me-1" title="Edit"><i class="fas fa-edit"></i></a>';
+                $deleteBtn = '<button type="button" class="btn btn-sm btn-danger delete-btn" data-id="' . $row->id . '" data-delete-url="/laporan/' . $row->id . '/delete" data-return-url="' . url()->current() . '" title="Hapus"><i class="fas fa-trash"></i></button>';
                 return $editBtn . $deleteBtn;
             })
-            ->rawColumns(['foto', 'kategori_masalah', 'status', 'penyelesaian', 'aksi'])
+            ->rawColumns(['foto', 'departemen', 'penyelesaian', 'aksi'])
             ->make(true);
     }
 
@@ -442,19 +418,30 @@ class laporanController extends Controller
     {
         $laporan = \App\Models\laporan::with('penyelesaian')->find($id);
         if (!$laporan || !$laporan->penyelesaian) {
-            return response()->json(['success' => false]);
+            return response()->json(['success' => false, 'message' => 'Data penyelesaian tidak ditemukan.']);
         }
         $penyelesaian = $laporan->penyelesaian;
+        $fotoUrls = [];
+        
+        // PERBAIKAN: $penyelesaian->Foto sudah menjadi array karena casting di model
+        if (is_array($penyelesaian->Foto)) {
+            foreach ($penyelesaian->Foto as $file) {
+                if (!empty($file)) { // Pastikan nama file tidak kosong
+                    $fotoUrls[] = url('images/' . $file);
+                }
+            }
+        }
+
         return response()->json([
             'success' => true,
-            'Tanggal' => $penyelesaian->Tanggal ? \Carbon\Carbon::parse($penyelesaian->Tanggal)->format('d-m-Y') : null,
-            'Foto' => $penyelesaian->Foto ? asset('images/' . $penyelesaian->Foto) : null,
+            'Tanggal' => \Carbon\Carbon::parse($penyelesaian->Tanggal)->format('d-m-Y'),
             'deskripsi_penyelesaian' => $penyelesaian->deskripsi_penyelesaian,
+            'Foto' => $fotoUrls, // Kirim sebagai array URL yang sudah benar
         ]);
     }
 
     // Tambahkan method baru
-    public function downloadSejarah()
+    public function downloadSejarah(Request $request)
     {
         try {
             // Ambil data laporan yang selesai

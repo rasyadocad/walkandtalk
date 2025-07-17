@@ -9,11 +9,12 @@
         <form action="{{ route('laporan.store') }}" method="POST" enctype="multipart/form-data">
             @csrf
             <div class="mb-3">
-                <label for="Foto" class="form-label">Foto:</label>
-                <input type="file" class="form-control @error('Foto') is-invalid @enderror" id="Foto" name="Foto" accept="image/*">
-                @error('Foto')
+                <label for="Foto" class="form-label">Foto (Maks. 5 foto):</label>
+                <input type="file" class="form-control @error('Foto.*') is-invalid @enderror" id="Foto" name="Foto[]" accept="image/*" multiple>
+                @error('Foto.*')
                     <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
+                <div id="foto-preview-container" class="mt-2 d-flex flex-wrap gap-2"></div>
                 <button type="button" class="btn btn-secondary mt-2" id="openCameraBtn">Ambil Foto</button>
                 <div id="cameraContainer" style="display:none; margin-top:10px;">
                     <video id="video" autoplay playsinline style="width:100%; max-width:350px; border:1px solid #ccc; border-radius:8px;"></video>
@@ -123,3 +124,158 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 @endif
 @endsection
+
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // --- Elements ---
+    const fotoInput = document.getElementById('Foto');
+    const previewContainer = document.getElementById('foto-preview-container');
+    const openCameraBtn = document.getElementById('openCameraBtn');
+    const cameraContainer = document.getElementById('cameraContainer');
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const captureBtn = document.getElementById('captureBtn');
+    const closeCameraBtn = document.getElementById('closeCameraBtn');
+    
+    // --- State ---
+    let fileStore = []; // The single source of truth for all files
+    let stream = null;
+    const MAX_FILES = 5;
+
+    // --- File Input Handling ---
+    fotoInput.addEventListener('change', function(event) {
+        const newFiles = Array.from(event.target.files);
+        // When user selects files, it replaces existing ones from the input,
+        // so we combine our camera files with the new selection.
+        const cameraFiles = fileStore.filter(f => f.name.startsWith('camera-'));
+        addFiles([...cameraFiles, ...newFiles], true);
+    });
+
+    // --- Camera Handling ---
+    openCameraBtn.addEventListener('click', async function () {
+        if (fileStore.length >= MAX_FILES) {
+            alert(`Anda sudah mencapai batas maksimal ${MAX_FILES} foto.`);
+            return;
+        }
+        cameraContainer.style.display = 'block';
+        openCameraBtn.style.display = 'none';
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        } catch (e) {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            } catch (err) {
+                alert('Tidak dapat mengakses kamera. Pastikan Anda memberikan izin.');
+                stopCamera();
+                return;
+            }
+        }
+        video.srcObject = stream;
+    });
+
+    captureBtn.addEventListener('click', function () {
+        if (fileStore.length >= MAX_FILES) {
+            alert(`Batas maksimal ${MAX_FILES} foto tercapai.`);
+            stopCamera();
+            return;
+        }
+
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        canvas.toBlob(function (blob) {
+            const newFile = new File([blob], `camera-${Date.now()}.jpg`, { type: 'image/jpeg' });
+            addFiles([newFile]); // Add camera photo to fileStore
+        }, 'image/jpeg', 0.95);
+        
+        // Keep camera open for more photos if limit not reached
+        if (fileStore.length + 1 >= MAX_FILES) {
+            stopCamera();
+        }
+    });
+
+    closeCameraBtn.addEventListener('click', stopCamera);
+
+    // --- Helper Functions ---
+    function addFiles(newFiles, isReplacement = false) {
+        let combined = isReplacement ? newFiles : [...fileStore, ...newFiles];
+
+        if (combined.length > MAX_FILES) {
+            alert(`Anda hanya dapat mengunggah maksimal ${MAX_FILES} foto.`);
+            // Trim the excess files
+            combined = combined.slice(0, MAX_FILES);
+        }
+        
+        fileStore = combined;
+        updateFileInput();
+        renderPreviews();
+
+        if (fileStore.length >= MAX_FILES) {
+            openCameraBtn.style.display = 'none';
+            stopCamera();
+        } else {
+            openCameraBtn.style.display = 'inline-block';
+        }
+    }
+
+    function stopCamera() {
+        if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+            stream = null;
+        }
+        video.srcObject = null;
+        cameraContainer.style.display = 'none';
+        if (fileStore.length < MAX_FILES) {
+            openCameraBtn.style.display = 'inline-block';
+        }
+    }
+
+    function renderPreviews() {
+        previewContainer.innerHTML = '';
+        fileStore.forEach((file, index) => {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const previewWrapper = document.createElement('div');
+                previewWrapper.className = 'position-relative d-inline-block';
+                
+                const img = document.createElement('img');
+                img.src = e.target.result;
+                img.style.width = '100px';
+                img.style.height = '100px';
+                img.style.objectFit = 'cover';
+                img.className = 'img-thumbnail';
+
+                const removeBtn = document.createElement('button');
+                removeBtn.innerHTML = '&times;';
+                removeBtn.type = 'button';
+                removeBtn.className = 'btn btn-danger btn-sm position-absolute top-0 end-0 m-1 p-0 d-flex justify-content-center align-items-center';
+                removeBtn.style.width = '20px';
+                removeBtn.style.height = '20px';
+                removeBtn.style.lineHeight = '1';
+                removeBtn.onclick = function() {
+                    fileStore.splice(index, 1);
+                    updateFileInput();
+                    renderPreviews();
+                     if (fileStore.length < MAX_FILES) {
+                        openCameraBtn.style.display = 'inline-block';
+                    }
+                };
+
+                previewWrapper.appendChild(img);
+                previewWrapper.appendChild(removeBtn);
+                previewContainer.appendChild(previewWrapper);
+            }
+            reader.readAsDataURL(file);
+        });
+    }
+
+    function updateFileInput() {
+        const dataTransfer = new DataTransfer();
+        fileStore.forEach(file => dataTransfer.items.add(file));
+        fotoInput.files = dataTransfer.files;
+    }
+});
+</script>
+@endpush
