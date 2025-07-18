@@ -12,27 +12,42 @@
 
             <div class="mb-3">
                 <label for="Foto" class="form-label">Tambah Foto Baru (Total maks. 5 foto):</label>
-                <input type="file" class="form-control @error('Foto.*') is-invalid @enderror" id="Foto" name="Foto[]" multiple>
+                <input type="file" class="form-control @error('Foto.*') is-invalid @enderror @error('Foto') is-invalid @enderror" id="Foto" name="Foto[]" multiple accept="image/*">
                 @error('Foto.*')
                     <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
                 @error('Foto')
                      <div class="invalid-feedback d-block">{{ $message }}</div>
                 @enderror
+
+                <button type="button" class="btn btn-secondary mt-2" id="openCameraBtn">Ambil Foto</button>
+                <div id="cameraContainer" style="display:none; margin-top:10px;">
+                    <video id="video" autoplay playsinline style="width:100%; max-width:350px; border:1px solid #ccc; border-radius:8px;"></video>
+                    <canvas id="canvas" style="display:none;"></canvas>
+                    <div class="mt-2">
+                        <button type="button" class="btn btn-success" id="captureBtn">Gunakan Foto</button>
+                        <button type="button" class="btn btn-danger" id="closeCameraBtn">Tutup Kamera</button>
+                    </div>
+                </div>
                 
+                <!-- Container untuk preview foto yang baru diunggah -->
+                <div id="new-photos-preview" class="mt-3 d-flex flex-wrap gap-2"></div>
+
                 <div class="mt-3">
-                    <label class="form-label">Foto Saat Ini:</label>
+                    <label class="form-label">Foto Saat Ini (<span id="current-photo-count">{{ is_array($laporan->Foto) ? count($laporan->Foto) : 0 }}</span> foto):</label>
                     <div id="current-photos" class="d-flex flex-wrap gap-2">
                         @if($laporan->Foto && is_array($laporan->Foto))
                             @forelse($laporan->Foto as $foto)
-                                <div class="position-relative">
+                                <div class="position-relative current-photo-item">
                                     <img src="{{ url('images/' . $foto) }}" alt="Foto" class="img-thumbnail" style="width: 100px; height: 100px; object-fit: cover;">
                                     <input type="hidden" name="existing_photos[]" value="{{ $foto }}">
-                                    <button type="button" class="btn btn-danger btn-sm remove-photo" style="position:absolute; top:0; right:0;">&times;</button>
+                                    <button type="button" class="btn btn-danger btn-sm remove-photo" style="position:absolute; top:0; right:0; line-height:1; padding: 2px 6px;">&times;</button>
                                 </div>
                             @empty
-                                <p>Tidak ada foto yang diunggah.</p>
+                                <p id="no-photo-text">Tidak ada foto yang diunggah.</p>
                             @endforelse
+                        @else
+                            <p id="no-photo-text">Tidak ada foto yang diunggah.</p>
                         @endif
                     </div>
                 </div>
@@ -96,74 +111,149 @@
 @push('scripts')
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // --- Elements ---
     const fotoInput = document.getElementById('Foto');
-    const previewContainer = document.getElementById('foto-preview-container');
+    const newPhotosPreview = document.getElementById('new-photos-preview');
     const currentPhotosContainer = document.getElementById('current-photos');
-    let files = [];
-    const MAX_FILES = 5;
+    const currentPhotoCountSpan = document.getElementById('current-photo-count');
+    const noPhotoText = document.getElementById('no-photo-text');
+    
+    const openCameraBtn = document.getElementById('openCameraBtn');
+    const cameraContainer = document.getElementById('cameraContainer');
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const captureBtn = document.getElementById('captureBtn');
+    const closeCameraBtn = document.getElementById('closeCameraBtn');
 
-    fotoInput.addEventListener('change', function(event) {
-        const newFiles = Array.from(event.target.files);
-        
-        if (newFiles.length > 0) {
-            // Sembunyikan foto lama jika ada file baru yang dipilih
-            currentPhotosContainer.style.display = 'none';
-        } else {
-            currentPhotosContainer.style.display = 'flex';
+    // --- State ---
+    let newFileStore = []; // Stores new files from input and camera
+    let stream = null;
+    const MAX_TOTAL_PHOTOS = 5;
+
+    // --- Core Functions ---
+    function getTotalPhotoCount() {
+        const existingPhotosCount = currentPhotosContainer.querySelectorAll('.current-photo-item').length;
+        return existingPhotosCount + newFileStore.length;
+    }
+
+    function validateAndRender() {
+        if (getTotalPhotoCount() > MAX_TOTAL_PHOTOS) {
+            alert(`Jumlah total foto tidak boleh lebih dari ${MAX_TOTAL_PHOTOS}.`);
+            // Trim excess files from the new file store
+            const excessCount = getTotalPhotoCount() - MAX_TOTAL_PHOTOS;
+            newFileStore.splice(newFileStore.length - excessCount, excessCount);
         }
-
-        if (newFiles.length > MAX_FILES) {
-            alert(`Anda hanya dapat mengunggah maksimal ${MAX_FILES} foto.`);
-            fotoInput.value = ''; // Reset input
-            previewContainer.innerHTML = ''; // Hapus pratinjau
-            currentPhotosContainer.style.display = 'flex'; // Tampilkan lagi foto lama
-            return;
-        }
         
-        files = newFiles;
-        renderPreviews();
-    });
+        updateFileInput();
+        renderNewPhotoPreviews();
+        updateButtonsState();
+    }
 
-    function renderPreviews() {
-        previewContainer.innerHTML = '';
-        files.forEach((file) => {
+    function updateFileInput() {
+        const dataTransfer = new DataTransfer();
+        newFileStore.forEach(file => dataTransfer.items.add(file));
+        fotoInput.files = dataTransfer.files;
+    }
+
+    function renderNewPhotoPreviews() {
+        newPhotosPreview.innerHTML = '';
+        newFileStore.forEach((file, index) => {
             const reader = new FileReader();
             reader.onload = function(e) {
-                const img = document.createElement('img');
-                img.src = e.target.result;
-                img.style.width = '100px';
-                img.style.height = '100px';
-                img.style.objectFit = 'cover';
-                img.className = 'img-thumbnail';
-                previewContainer.appendChild(img);
+                const wrapper = document.createElement('div');
+                wrapper.className = 'position-relative d-inline-block';
+                wrapper.innerHTML = `
+                    <img src="${e.target.result}" class="img-thumbnail" style="width: 100px; height: 100px; object-fit: cover;">
+                    <button type="button" class="btn btn-danger btn-sm position-absolute top-0 end-0 m-1 p-0 d-flex justify-content-center align-items-center" style="width:20px;height:20px;line-height:1;">&times;</button>
+                `;
+                wrapper.querySelector('button').onclick = () => {
+                    newFileStore.splice(index, 1);
+                    validateAndRender();
+                };
+                newPhotosPreview.appendChild(wrapper);
             }
             reader.readAsDataURL(file);
         });
     }
 
-    // Hapus foto yang ada
-    document.querySelectorAll('.remove-photo').forEach(button => {
-        button.addEventListener('click', function() {
-            const photoContainer = this.closest('.position-relative');
-            const fotoName = photoContainer.querySelector('input[type="hidden"]').value;
+    function updateCurrentPhotoCount() {
+        const count = currentPhotosContainer.querySelectorAll('.current-photo-item').length;
+        if (currentPhotoCountSpan) currentPhotoCountSpan.innerText = count;
+        if (noPhotoText) noPhotoText.style.display = count === 0 ? 'block' : 'none';
+    }
 
-            // Hapus dari daftar foto yang ada
-            currentPhotosContainer.removeChild(photoContainer);
+    function updateButtonsState() {
+        const canAddMore = getTotalPhotoCount() < MAX_TOTAL_PHOTOS;
+        openCameraBtn.style.display = canAddMore ? 'inline-block' : 'none';
+        if (!canAddMore) stopCamera();
+    }
 
-            // Tambah input hidden untuk foto yang dihapus
-            const deletedPhotosInput = document.getElementById('deleted-photos');
-            if (deletedPhotosInput) {
-                deletedPhotosInput.value += `${fotoName},`;
-            } else {
-                const newDeletedPhotosInput = document.createElement('input');
-                newDeletedPhotosInput.type = 'hidden';
-                newDeletedPhotosInput.name = 'deleted_photos';
-                newDeletedPhotosInput.id = 'deleted-photos';
-                newDeletedPhotosInput.value = `${fotoName},`;
-                fotoInput.closest('form').appendChild(newDeletedPhotosInput);
-            }
-        });
+    // --- Event Listeners ---
+    fotoInput.addEventListener('change', function(event) {
+        const newFiles = Array.from(event.target.files);
+        const cameraFiles = newFileStore.filter(f => f.name.startsWith('camera-'));
+        newFileStore = [...cameraFiles, ...newFiles];
+        validateAndRender();
     });
+
+    currentPhotosContainer.addEventListener('click', function(event) {
+        if (event.target.classList.contains('remove-photo')) {
+            event.target.closest('.current-photo-item').remove();
+            updateCurrentPhotoCount();
+            validateAndRender();
+        }
+    });
+
+    // --- Camera Logic ---
+    openCameraBtn.addEventListener('click', async function () {
+        if (getTotalPhotoCount() >= MAX_TOTAL_PHOTOS) {
+            alert(`Batas maksimal ${MAX_TOTAL_PHOTOS} foto tercapai.`);
+            return;
+        }
+        cameraContainer.style.display = 'block';
+        openCameraBtn.style.display = 'none';
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        } catch (e) {
+            stream = await navigator.mediaDevices.getUserMedia({ video: true }).catch(() => {
+                alert('Tidak dapat mengakses kamera.');
+                stopCamera();
+            });
+        }
+        if (stream) video.srcObject = stream;
+    });
+
+    captureBtn.addEventListener('click', function () {
+        if (getTotalPhotoCount() >= MAX_TOTAL_PHOTOS) {
+            alert(`Batas maksimal ${MAX_TOTAL_PHOTOS} foto tercapai.`);
+            stopCamera();
+            return;
+        }
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(function (blob) {
+            const newFile = new File([blob], `camera-${Date.now()}.jpg`, { type: 'image/jpeg' });
+            newFileStore.push(newFile);
+            validateAndRender();
+        }, 'image/jpeg', 0.95);
+    });
+
+    closeCameraBtn.addEventListener('click', stopCamera);
+
+    function stopCamera() {
+        if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+            stream = null;
+        }
+        video.srcObject = null;
+        cameraContainer.style.display = 'none';
+        updateButtonsState();
+    }
+
+    // --- Initial Load ---
+    updateCurrentPhotoCount();
+    updateButtonsState();
 });
 </script>
 @endpush
