@@ -49,4 +49,17 @@ document.addEventListener('DOMContentLoaded', function () {
             imgPreview.src = '';
         });
     }
+
+    // Perbaikan untuk dropdown panjang di mobile
+    const kategoriSelects = document.querySelectorAll('select#kategori_masalah, select#kategori');
+    if (kategoriSelects.length) {
+        kategoriSelects.forEach(select => {
+            select.addEventListener('change', function() {
+                // Auto-scroll untuk memastikan opsi yang dipilih terlihat
+                if (window.innerWidth < 576) {
+                    this.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            });
+        });
+    }
 });

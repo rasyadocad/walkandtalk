@@ -59,12 +59,8 @@
                 <label for="kategori_masalah" class="form-label">Kategori Masalah:</label>
                 <select class="form-select" id="kategori_masalah" name="kategori_masalah" required>
                     <option value="">Pilih Kategori Masalah</option>
-                    <option value="Safety: Potensi bahaya" {{ $laporan->kategori_masalah == 'Safety: Potensi bahaya' ? 'selected' : '' }}>Safety: Potensi bahaya</option>
-                    <option value="Seiri: Barang yang tidak diperlukan" {{ $laporan->kategori_masalah == 'Seiri: Barang yang tidak diperlukan' ? 'selected' : '' }}>Seiri: Barang yang tidak diperlukan</option>
-                    <option value="Seiton: Barang tersusun dengan tidak rapi" {{ $laporan->kategori_masalah == 'Seiton: Barang tersusun dengan tidak rapi' ? 'selected' : '' }}>Seiton: Barang tersusun dengan tidak rapi</option>
-                    <option value="Seiso: Kebersihan" {{ $laporan->kategori_masalah == 'Seiso: Kebersihan' ? 'selected' : '' }}>Seiso: Kebersihan</option>
-                    <option value="Seiketsu: Tidak mengikuti SOP" {{ $laporan->kategori_masalah == 'Seiketsu: Tidak mengikuti SOP' ? 'selected' : '' }}>Seiketsu: Tidak mengikuti SOP</option>
-                    <option value="Shitsuke: Evaluasi" {{ $laporan->kategori_masalah == 'Shitsuke: Evaluasi' ? 'selected' : '' }}>Shitsuke: Evaluasi</option>
+                    <option value="Safety: Potensi Bahaya" {{ $laporan->kategori_masalah == 'Safety: Potensi Bahaya' ? 'selected' : '' }}>Safety: Potensi Bahaya</option>
+                    <option value="5S: Ringkas, Rapi, Resik, Rawat, dan Rajin" {{ $laporan->kategori_masalah == '5S: Ringkas, Rapi, Resik, Rawat, dan Rajin' ? 'selected' : '' }}>5S: Ringkas, Rapi, Resik, Rawat, dan Rajin</option>
                 </select>
             </div>
 

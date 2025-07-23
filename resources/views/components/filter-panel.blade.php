@@ -37,12 +37,8 @@
                     <label class="form-label">Kategori Masalah</label>
                     <select class="form-select filter-control" id="kategori" name="kategori">
                         <option value="">Semua Kategori</option>
-                        <option value="Safety: Potensi bahaya">Safety: Potensi bahaya</option>
-                        <option value="Seiri: Barang yang tidak diperlukan">Seiri: Barang yang tidak diperlukan</option>
-                        <option value="Seiton: Barang tersusun dengan tidak rapi">Seiton: Barang tersusun dengan tidak rapi</option>
-                        <option value="Seiso: Kebersihan">Seiso: Kebersihan</option>
-                        <option value="Seiketsu: Tidak mengikuti SOP">Seiketsu: Tidak mengikuti SOP</option>
-                        <option value="Shitsuke: Evaluasi">Shitsuke: Evaluasi</option>
+                        <option value="Safety: Potensi Bahaya">Safety: Potensi Bahaya</option>
+                        <option value="5S: Ringkas, Rapi, Resik, Rawat, dan Rajin">5S: Ringkas, Rapi, Resik, Rawat, dan Rajin</option>
                     </select>
                 </div>
 

@@ -48,12 +48,8 @@
                 <label for="kategori_masalah" class="form-label">Kategori Masalah:</label>
                 <select class="form-select @error('kategori_masalah') is-invalid @enderror" id="kategori_masalah" name="kategori_masalah" required>
                     <option value="">Pilih Kategori Masalah</option>
-                    <option value="Safety: Potensi bahaya">Safety: Potensi bahaya</option>
-                    <option value="Seiri: Barang yang tidak diperlukan">Seiri: Barang yang tidak diperlukan</option>
-                    <option value="Seiton: Barang tersusun dengan tidak rapi">Seiton: Barang tersusun dengan tidak rapi</option>
-                    <option value="Seiso: Kebersihan">Seiso: Kebersihan</option>
-                    <option value="Seiketsu: Tidak mengikuti SOP">Seiketsu: Tidak mengikuti SOP</option>
-                    <option value="Shitsuke: Evaluasi">Shitsuke: Evaluasi</option>
+                    <option value="Safety: Potensi Bahaya" {{ old('kategori_masalah') == 'Safety: Potensi Bahaya' ? 'selected' : '' }}>Safety: Potensi Bahaya</option>
+                    <option value="5S: Ringkas, Rapi, Resik, Rawat, dan Rajin" {{ old('kategori_masalah') == '5S: Ringkas, Rapi, Resik, Rawat, dan Rajin' ? 'selected' : '' }}>5S: Ringkas, Rapi, Resik, Rawat, dan Rajin</option>
                 </select>
                 @error('kategori_masalah')
                     <div class="invalid-feedback">{{ $message }}</div>

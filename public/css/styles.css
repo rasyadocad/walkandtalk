@@ -691,3 +691,16 @@ tr.shown {
         padding: 0.5rem 0.75rem;
     }
 }
+
+/* Dropdown responsif untuk kategori panjang */
+@media (max-width: 576px) {
+    select.form-select option {
+        white-space: normal;
+        word-wrap: break-word;
+    }
+    
+    .form-select {
+        padding-right: 2rem;
+        text-overflow: ellipsis;
+    }
+}
