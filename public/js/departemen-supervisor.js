@@ -13,10 +13,6 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(response => response.json())
             .then(data => {
                 supervisorInput.value = data.supervisor || '';
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                supervisorInput.value = '';
             });
     }
 

@@ -70,15 +70,7 @@ class laporanController extends Controller
         ]);
 
         // Kirim email ke supervisor
-        $supervisor = $laporan->departemenSupervisor;
-        if ($supervisor && $supervisor->email) {
-            try {
-                Mail::to($supervisor->email)->send(new LaporanDitugaskanSupervisor($laporan));
-            } catch (\Exception $e) {
-                // Log error jika pengiriman email gagal
-                \Log::error("Gagal mengirim email notifikasi: " . $e->getMessage());
-            }
-        }
+        $this->sendSupervisorNotifications($laporan);
 
         // Redirect dengan pesan sukses
         return redirect()->route('dashboard')->with('success', 'Laporan berhasil ditambahkan.');
@@ -155,6 +147,11 @@ class laporanController extends Controller
             'tenggat_waktu' => $request->tenggat_waktu,
             'status' => $request->status, // Perbarui status
         ]);
+
+        // Kirim notifikasi jika status ditugaskan
+        if ($request->status == 'Ditugaskan') {
+            $this->sendSupervisorNotifications($laporan);
+        }
 
         // Redirect dengan pesan sukses
         return redirect()->route('dashboard')->with('success', 'Laporan berhasil diperbarui.');
@@ -412,8 +409,29 @@ class laporanController extends Controller
     public function getSupervisor($id)
     {
         $departemen = DepartemenSupervisor::find($id);
+        
+        if (!$departemen) {
+            return response()->json([
+                'supervisor' => null
+            ]);
+        }
+        
+        if ($departemen->is_group) {
+            // If this is a group, return the formatted list of supervisors
+            $supervisors = array_map(function($member) {
+                return $member['supervisor'];
+            }, $departemen->group_members);
+            
+            return response()->json([
+                'supervisor' => implode(', ', $supervisors),
+                'is_group' => true,
+                'group_members' => $departemen->group_members
+            ]);
+        }
+        
         return response()->json([
-            'supervisor' => $departemen ? $departemen->supervisor : null
+            'supervisor' => $departemen->supervisor,
+            'is_group' => false
         ]);
     }
 
@@ -502,5 +520,40 @@ class laporanController extends Controller
         }
         
         return $query;
+    }
+
+    /**
+     * Helper method to send notifications to supervisors
+     */
+    private function sendSupervisorNotifications($laporan)
+    {
+        $supervisor = $laporan->departemenSupervisor;
+        if (!$supervisor) {
+            return;
+        }
+
+        if ($supervisor->is_group) {
+            // Send emails to all supervisors in the group
+            foreach ($supervisor->group_members as $member) {
+                if (!empty($member['email'])) {
+                    try {
+                        Mail::to($member['email'])->send(new LaporanDitugaskanSupervisor($laporan));
+                    } catch (\Exception $e) {
+                        // Log error if email fails
+                        \Log::error("Failed to send notification email to {$member['email']}: " . $e->getMessage());
+                    }
+                }
+            }
+        } else {
+            // Send email to the single supervisor
+            if ($supervisor->email) {
+                try {
+                    Mail::to($supervisor->email)->send(new LaporanDitugaskanSupervisor($laporan));
+                } catch (\Exception $e) {
+                    // Log error jika pengiriman email gagal
+                    \Log::error("Gagal mengirim email notifikasi: " . $e->getMessage());
+                }
+            }
+        }
     }
 }
